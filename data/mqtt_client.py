@@ -1,77 +1,33 @@
-"""
-Simple MQTT client using HiveMQ public broker.
-Includes simulator for testing.
-"""
-
-import random
-import time
-from typing import Dict
-
 import paho.mqtt.client as mqtt
+import json
 
+class EnergyMQTTClient:
+    """MQTT client to handle live energy data streams."""
+    def __init__(self, topic="energy/live/data"):
+        self.client = mqtt.Client()
+        self.topic = topic
+        self.latest_data = None
 
-BROKER = "broker.hivemq.com"
-PORT = 1883
+    def on_connect(self, client, userdata, flags, rc):
+        if rc == 0:
+            client.subscribe(self.topic)
 
-TOPICS = [
-    "energy/solar",
-    "energy/wind",
-    "energy/demand",
-]
-
-_latest_data: Dict[str, float] = {
-    "solar": 0.0,
-    "wind": 0.0,
-    "demand": 0.0,
-}
-
-
-def _on_connect(client, userdata, flags, rc):
-    for topic in TOPICS:
-        client.subscribe(topic)
-
-
-def _on_message(client, userdata, msg):
-    key = msg.topic.split("/")[-1]
-    try:
-        _latest_data[key] = float(msg.payload.decode())
-    except Exception:
-        pass
-
-
-def create_client() -> mqtt.Client:
-    client = mqtt.Client()
-    client.on_connect = _on_connect
-    client.on_message = _on_message
-
-    try:
-        client.connect(BROKER, PORT, 60)
-    except Exception:
-        pass
-
-    return client
-
-
-def start_client(client: mqtt.Client):
-    try:
-        client.loop_start()
-    except Exception:
-        pass
-
-
-def simulate_sensor_data(client: mqtt.Client):
-    """
-    Publish fake sensor values every second.
-    """
-    while True:
+    def on_message(self, client, userdata, msg):
         try:
-            client.publish("energy/solar", random.uniform(0, 80))
-            client.publish("energy/wind", random.uniform(0, 50))
-            client.publish("energy/demand", random.uniform(40, 120))
-            time.sleep(1)
+            self.latest_data = json.loads(msg.payload.decode())
         except Exception:
-            break
+            pass
 
+    def start(self):
+        """Connect to public broker and start background loop."""
+        try:
+            self.client.on_connect = self.on_connect
+            self.client.on_message = self.on_message
+            self.client.connect("broker.hivemq.com", 1883, 60)
+            self.client.loop_start()
+        except Exception:
+            print("MQTT Connection Failed")
 
-def get_latest_data() -> Dict[str, float]:
-    return _latest_data.copy()
+    def get_data(self):
+        """Retrieve the last received message."""
+        return self.latest_data

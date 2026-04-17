@@ -1,6 +1,7 @@
-# app.py — Dynamic Renewable GA Scheduler (Streamlit Cloud ready)
+# app.py — Dynamic Renewable GA Scheduler (Final 5-Column Version)
 import streamlit as st
 import numpy as np
+import os
 
 st.set_page_config(
     page_title="Renewable GA Scheduler",
@@ -9,6 +10,7 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
+# Import UI and Core modules
 from ui.sidebar import render_sidebar
 from ui.input_table import render_input_table
 from ui.results import render_results
@@ -17,7 +19,6 @@ from ui.compare import render_compare_page
 from core.ga import ga_run_live
 from utils.storage import save_run
 
-
 def main():
     st.title("⚡ Renewable Energy Scheduling — GA Optimizer")
     st.markdown(
@@ -25,23 +26,21 @@ def main():
         "Results update **live** as the GA evolves."
     )
 
-    # Sidebar config
+    # 1. Render Sidebar and sync to session state
     config = render_sidebar()
-    
-
-    # ✅ ADD THIS LINE
     st.session_state.config = config
 
-    # Top-level tabs
+    # 2. Setup Navigation Tabs
     tab_run, tab_compare = st.tabs(["🚀 Run Optimizer", "🆚 Compare Runs"])
 
     # ------------------------------------------------------------------
     # TAB 1: Run Optimizer
     # ------------------------------------------------------------------
     with tab_run:
-        demand, max_solar, max_wind, max_hydro = render_input_table(
-    config["time_slots"], config
-)
+        # Extract 5 arrays from the input table
+        demand, max_solar, max_wind, max_hydro, max_grid = render_input_table(
+            config["time_slots"], config
+        )
 
         col_btn, col_name = st.columns([2, 3])
         with col_btn:
@@ -54,11 +53,13 @@ def main():
             last_progress = None
 
             try:
+                # Execute GA with 5-column priority logic
                 for progress in ga_run_live(
                     demand=demand,
                     max_solar=max_solar,
                     max_wind=max_wind,
                     max_hydro=max_hydro,
+                    max_grid=max_grid,
                     battery_cap=config["battery_capacity"],
                     init_soc=config["initial_soc"],
                     charge_rate=config["max_charge"],
@@ -74,7 +75,7 @@ def main():
 
                 st.success("✅ GA Optimization Completed!")
 
-                # Auto-save run
+                # 3. Save the Run (We will update storage.py next to handle this)
                 save_run(
                     run_name=run_name,
                     config=config,
@@ -86,7 +87,7 @@ def main():
                 )
                 st.caption(f"💾 Run saved as **{run_name}** — view it in the Compare Runs tab.")
 
-                # Final results
+                # 4. Render Final Results
                 render_results(
                     last_progress["best_schedule"],
                     last_progress["soc_list"],
@@ -103,7 +104,6 @@ def main():
     # ------------------------------------------------------------------
     with tab_compare:
         render_compare_page()
-
 
 if __name__ == "__main__":
     main()

@@ -1,4 +1,4 @@
-# ui/live_progress.py — Real-time GA progress: bar, fitness chart, live schedule preview
+# ui/live_progress.py — Updated for 5-column live visualization
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -8,18 +8,13 @@ import streamlit as st
 def render_live_progress(progress: dict, demand: np.ndarray) -> None:
     """
     Update all live UI elements with the latest GA progress snapshot.
-
-    Call this inside the GA generation loop with each yielded progress dict.
-
-    Args:
-        progress: dict yielded by ga_run_live()
-        demand:   (T,) demand array for chart overlays
+    Now supports 5-column schedules: [Solar, Wind, Hydro, Grid, Battery].
     """
     gen = progress["generation"]
     total = progress["total_generations"]
     cost = progress["best_fitness"]
     history = progress["fitness_history"]
-    schedule = progress["best_schedule"]
+    schedule = progress["best_schedule"] # This is now a (T x 5) array
     soc_list = progress["soc_list"]
 
     # --- Progress bar ---
@@ -38,18 +33,23 @@ def render_live_progress(progress: dict, demand: np.ndarray) -> None:
     st.session_state["_fitness_chart"].pyplot(fig_f)
     plt.close(fig_f)
 
-    # --- Animated generation mix bar chart ---
+    # --- Animated generation mix bar chart (Updated for 5 columns) ---
     hours = np.arange(1, len(demand) + 1)
     solar = schedule[:, 0]
     wind  = schedule[:, 1]
     hydro = schedule[:, 2]
-    batt  = np.clip(schedule[:, 3], 0, None)
+    grid  = schedule[:, 3] # NEW: Grid Power (Govt)
+    batt  = np.clip(schedule[:, 4], 0, None) # Battery is now at index 4
 
     fig_g, ax_g = plt.subplots(figsize=(10, 3))
     ax_g.bar(hours, solar, label="Solar ☀️",  color="#f4a522")
     ax_g.bar(hours, wind,  bottom=solar,       label="Wind 🌬️",  color="#4fc3f7")
     ax_g.bar(hours, hydro, bottom=solar+wind,  label="Hydro 💧", color="#29b6f6")
-    ax_g.bar(hours, batt,  bottom=solar+wind+hydro, label="Battery 🔋", color="#a5d6a7")
+    # Add Grid Power to the stack
+    ax_g.bar(hours, grid,  bottom=solar+wind+hydro, label="Grid (Govt) 🏛️", color="#9e9e9e") 
+    # Add Battery Discharge to the top of the stack
+    ax_g.bar(hours, batt,  bottom=solar+wind+hydro+grid, label="Battery 🔋", color="#a5d6a7") 
+    
     ax_g.plot(hours, demand, "r--o", linewidth=1.5, markersize=3, label="Demand")
     ax_g.set_title(f"Best Schedule (Gen {gen})", fontsize=10)
     ax_g.set_xlabel("Hour", fontsize=9)
@@ -78,7 +78,6 @@ def render_live_progress(progress: dict, demand: np.ndarray) -> None:
 def init_live_widgets() -> None:
     """
     Create and store Streamlit placeholder widgets in session_state.
-    Call once before the GA loop starts.
     """
     st.subheader("🔄 Live Optimization Progress")
     st.session_state["_prog_bar"]     = st.progress(0, text="Starting...")

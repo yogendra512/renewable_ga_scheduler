@@ -1,4 +1,4 @@
-# core/battery.py — Battery constraint enforcement
+# core/battery.py — Updated for Grid Priority and 5-Column Schedule
 import numpy as np
 
 
@@ -11,20 +11,13 @@ def enforce_battery_constraints(
     initial_soc: float,
 ) -> tuple[np.ndarray, list[float], list[str]]:
     """
-    Simulate battery behavior hour-by-hour and adjust the schedule.
+    Simulate battery behavior with priority:
+    1. Renewables (Solar, Wind, Hydro)
+    2. Grid Power (Govt)
+    3. Battery (Backup/Storage)
 
     Args:
-        schedule:       (T x 4) array [solar, wind, hydro, battery]
-        demand:         (T,) demand vector
-        battery_cap:    Maximum battery capacity (units)
-        charge_rate:    Max charge per hour
-        discharge_rate: Max discharge per hour
-        initial_soc:    Starting state of charge
-
-    Returns:
-        new_schedule:   Adjusted schedule with battery column filled
-        soc_list:       SOC at end of each hour
-        battery_action: Human-readable action per hour
+        schedule: (T x 5) [solar, wind, hydro, grid, battery]
     """
     soc = float(initial_soc)
     new_schedule = schedule.astype(float).copy()
@@ -32,27 +25,34 @@ def enforce_battery_constraints(
     battery_action: list[str] = []
 
     for t in range(schedule.shape[0]):
-        gen = float(new_schedule[t, 0] + new_schedule[t, 1] + new_schedule[t, 2])
-        diff = demand[t] - gen
+        # Calculate available power before using the battery
+        # Renewables (Indices 0, 1, 2) + Grid Power (Index 3)
+        renewables = float(new_schedule[t, 0] + new_schedule[t, 1] + new_schedule[t, 2])
+        grid_power = float(new_schedule[t, 3])
+        
+        total_gen = renewables + grid_power
+        diff = demand[t] - total_gen
 
         if diff > 0:
-            # Demand exceeds generation — discharge battery
+            # Demand exceeds combined supply — discharge battery
             discharge = min(diff, soc, discharge_rate)
-            new_schedule[t, 3] = discharge
+            new_schedule[t, 4] = discharge # Battery is now at index 4
             soc -= discharge
             battery_action.append(f"+{discharge:.1f} (discharge)" if discharge > 0 else "0")
 
         elif diff < 0:
-            # Surplus generation — charge battery
+            # Surplus exists — use it to charge battery
+            # Logic: Charge primarily from free renewable surplus
             charge = min(-diff, battery_cap - soc, charge_rate)
-            new_schedule[t, 3] = -charge
+            new_schedule[t, 4] = -charge
             soc += charge
             battery_action.append(f"-{charge:.1f} (charge)" if charge > 0 else "0")
 
         else:
-            new_schedule[t, 3] = 0
+            new_schedule[t, 4] = 0
             battery_action.append("0")
 
+        # Ensure SOC stays within physical limits
         soc = max(0.0, min(soc, battery_cap))
         soc_list.append(soc)
 
