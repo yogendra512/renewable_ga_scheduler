@@ -27,6 +27,10 @@ def main():
 
     # Sidebar config
     config = render_sidebar()
+    
+
+    # ✅ ADD THIS LINE
+    st.session_state.config = config
 
     # Top-level tabs
     tab_run, tab_compare = st.tabs(["🚀 Run Optimizer", "🆚 Compare Runs"])
@@ -35,7 +39,9 @@ def main():
     # TAB 1: Run Optimizer
     # ------------------------------------------------------------------
     with tab_run:
-        demand, max_solar, max_wind, max_hydro = render_input_table(config["time_slots"])
+        demand, max_solar, max_wind, max_hydro = render_input_table(
+    config["time_slots"], config
+)
 
         col_btn, col_name = st.columns([2, 3])
         with col_btn:
