@@ -1,12 +1,23 @@
-# ui/sidebar.py — Sidebar inputs and configuration
+# ui/sidebar.py — Sidebar with System Architecture Selector for India
 import streamlit as st
 
 
 def render_sidebar() -> dict:
     """
-    Render sidebar controls and return all configuration as a dict.
-    Includes User Type toggle (Basic/Advanced) and Resource Availability.
+    Render sidebar controls and return configuration.
+    Dynamically adapts to Standard On-Grid, Hybrid, and Off-Grid systems.
     """
+
+    # ===============================
+    # 🏗️ SYSTEM ARCHITECTURE (NEW)
+    # ===============================
+    st.sidebar.header("🏗️ System Architecture")
+    system_type = st.sidebar.selectbox(
+        "Select System Type",
+        ["Hybrid (On-Grid + Battery)", "Standard On-Grid (No Battery)", "Off-Grid (Standalone)"],
+        index=0,
+        help="Hybrid: Sells excess & has backup. Standard: Bill reduction only. Off-Grid: Remote sites."
+    )
 
     # ===============================
     # 👤 USER MODE SECTION
@@ -15,106 +26,93 @@ def render_sidebar() -> dict:
     user_mode = st.sidebar.radio(
         "Select Experience Level",
         ["Basic", "Advanced"],
-        help="Basic mode hides complex technical settings for a simpler experience."
+        help="Basic mode hides complex technical settings."
     )
+
+    # Initialize config
+    config = {
+        "system_type": system_type,
+        "user_mode": user_mode
+    }
 
     # ===============================
     # 🌐 DATA SOURCE SECTION
     # ===============================
     st.sidebar.header("🌐 Data Source")
-
     data_source = st.sidebar.selectbox(
         "Select Data Source",
-        ["Manual", "Live Weather API", "MQTT Sensors", "CSV Upload"],
-        key="data_source_select"
+        ["Manual", "Live Weather API", "MQTT Sensors", "CSV Upload"]
     )
-
-    config = {
-        "data_source": data_source,
-        "user_mode": user_mode
-    }
+    config["data_source"] = data_source
 
     if data_source == "Live Weather API":
-        config["latitude"] = st.sidebar.number_input(
-            "Latitude", value=25.4, key="latitude_input"
-        )
-        config["longitude"] = st.sidebar.number_input(
-            "Longitude", value=81.8, key="longitude_input"
-        )
+        config["latitude"] = st.sidebar.number_input("Latitude", value=25.4)
+        config["longitude"] = st.sidebar.number_input("Longitude", value=81.8)
     elif data_source == "CSV Upload":
-        config["csv_file"] = st.sidebar.file_uploader(
-            "Upload CSV", type=["csv"], key="csv_uploader"
-        )
+        config["csv_file"] = st.sidebar.file_uploader("Upload CSV", type=["csv"])
 
     # ===============================
-    # 🔌 RESOURCE AVAILABILITY (NEW)
+    # 🇮🇳 INDIAN GRID & NET METERING
+    # ===============================
+    # Hide these options if the system is "Off-Grid"
+    if system_type != "Off-Grid (Standalone)":
+        st.sidebar.header("🇮🇳 Indian Grid Settings")
+        
+        config["net_metering"] = st.sidebar.toggle("Enable Net Metering", value=True)
+
+        col1, col2 = st.sidebar.columns(2)
+        with col1:
+            config["import_price"] = st.sidebar.number_input("Buy (₹/unit)", value=7.5, step=0.1)
+        with col2:
+            config["export_price"] = st.sidebar.number_input("Sell (₹/unit)", value=3.5, step=0.1)
+
+        config["grid_available"] = st.sidebar.toggle("Grid Available (No Power Cut)", value=True)
+        config["grid_capacity"] = 100 if config["grid_available"] else 0
+    else:
+        # Defaults for Off-Grid
+        config["net_metering"] = False
+        config["import_price"] = 0.0
+        config["export_price"] = 0.0
+        config["grid_capacity"] = 0
+
+    # ===============================
+    # 🔌 RESOURCE AVAILABILITY
     # ===============================
     st.sidebar.header("🔌 Available Resources")
-    st.sidebar.caption("Toggle which resources are available at your location.")
-    config["include_solar"] = st.sidebar.toggle("Include Solar", value=True, key="inc_solar")
-    config["include_wind"] = st.sidebar.toggle("Include Wind", value=True, key="inc_wind")
-    config["include_hydro"] = st.sidebar.toggle("Include Hydro", value=True, key="inc_hydro")
+    config["include_solar"] = st.sidebar.toggle("Include Solar", value=True)
+    config["include_wind"] = st.sidebar.toggle("Include Wind", value=True)
+    config["include_hydro"] = st.sidebar.toggle("Include Hydro", value=True)
 
     # ===============================
-    # ⚙️ SIMULATION INPUTS
+    # ⚙️ SIMULATION & BATTERY
     # ===============================
     st.sidebar.header("⚙️ Simulation Inputs")
+    time_slots = st.sidebar.number_input("Number of Hours", 3, 48, 12)
 
-    time_slots = st.sidebar.number_input(
-        "Number of Hours (Time Slots)",
-        min_value=3, max_value=48, value=12,
-        key="time_slots_input",
-        help="How many hours ahead should the GA optimize?"
-    )
-
-    # --- Battery Settings ---
-    st.sidebar.subheader("🔋 Battery Settings")
-    battery_capacity = st.sidebar.number_input(
-        "Capacity (units)", min_value=10, max_value=1000, value=100, step=10,
-        key="battery_capacity"
-    )
-
-    # Advanced battery settings hidden in Basic mode
-    if user_mode == "Advanced":
-        initial_soc = st.sidebar.number_input(
-            "Initial SOC (units)", min_value=0, max_value=int(battery_capacity), value=50,
-            key="initial_soc"
-        )
-        max_charge = st.sidebar.number_input(
-            "Max Charge/Hour", min_value=1, max_value=500, value=20,
-            key="max_charge"
-        )
-        max_discharge = st.sidebar.number_input(
-            "Max Discharge/Hour", min_value=1, max_value=500, value=20,
-            key="max_discharge"
-        )
+    # --- Battery Settings (Hidden for Standard On-Grid) ---
+    if system_type != "Standard On-Grid (No Battery)":
+        st.sidebar.subheader("🔋 Battery Settings")
+        battery_capacity = st.sidebar.number_input("Capacity (units)", 10, 1000, 100, step=10)
+        
+        if user_mode == "Advanced":
+            initial_soc = st.sidebar.number_input("Initial SOC", 0, int(battery_capacity), 50)
+            max_charge = st.sidebar.number_input("Max Charge/Hr", 1, 500, 20)
+            max_discharge = st.sidebar.number_input("Max Discharge/Hr", 1, 500, 20)
+        else:
+            initial_soc, max_charge, max_discharge = 50, 20, 20
     else:
-        # Defaults for Basic mode
-        initial_soc = 50
-        max_charge = 20
-        max_discharge = 20
+        # Defaults for systems with no battery
+        battery_capacity, initial_soc, max_charge, max_discharge = 0, 0, 0, 0
 
-    # --- GA Settings (Hidden in Basic Mode) ---
+    # --- GA Settings ---
     if user_mode == "Advanced":
-        st.sidebar.subheader("🧬 Genetic Algorithm Settings")
-        pop_size = st.sidebar.number_input(
-            "Population Size", min_value=10, max_value=500, value=60, key="pop_size"
-        )
-        generations = st.sidebar.number_input(
-            "Generations", min_value=10, max_value=1000, value=200, key="generations"
-        )
-        mutation_rate = st.sidebar.slider(
-            "Mutation Rate", min_value=0.0, max_value=0.5, value=0.12, key="mutation_rate"
-        )
-        elitism_frac = st.sidebar.slider(
-            "Elitism Fraction", min_value=0.0, max_value=0.5, value=0.2, key="elitism_frac"
-        )
+        st.sidebar.subheader("🧬 GA Settings")
+        pop_size = st.sidebar.number_input("Pop Size", 10, 500, 60)
+        generations = st.sidebar.number_input("Generations", 10, 1000, 200)
+        mutation_rate = st.sidebar.slider("Mutation", 0.0, 0.5, 0.12)
+        elitism_frac = st.sidebar.slider("Elitism", 0.0, 0.5, 0.2)
     else:
-        # Defaults for Basic mode
-        pop_size = 60
-        generations = 200
-        mutation_rate = 0.12
-        elitism_frac = 0.2
+        pop_size, generations, mutation_rate, elitism_frac = 60, 200, 0.12, 0.2
 
     # ===============================
     # FINAL CONFIG UPDATE

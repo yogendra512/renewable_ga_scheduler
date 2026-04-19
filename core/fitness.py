@@ -1,36 +1,40 @@
-# core/fitness.py — Priority and Cost-based Fitness Function
+# core/fitness.py — Indian Net Metering & Financial Optimizer
 import numpy as np
 
-# --- Penalty weights ---
-# Unmet demand is the highest priority (blackout prevention)
-UNMET_WEIGHT = 5.0   
-# Surplus is penalized to prevent wasting renewable energy
-SURPLUS_WEIGHT = 0.5 
+# --- Reliability Penalties ---
+# Blackouts are expensive for Indian warehouses/homes
+UNMET_WEIGHT = 20.0  
 
-# --- Source Cost weights ---
-# Solar, Wind, and Hydro are 0 (Free/Priority)
-# Grid Power has a cost, so we penalize its usage to make it the last resort
-GRID_COST_WEIGHT = 1.5 
-
-def fitness(schedule: np.ndarray, demand: np.ndarray) -> float:
+def fitness(schedule: np.ndarray, demand: np.ndarray, config: dict = None) -> float:
     """
-    Evaluate schedule quality based on demand fulfillment and cost.
+    Evaluates the schedule based on Indian Net Metering (On-Grid) economics.
     
     Schedule columns:
-    [0: Solar, 1: Wind, 2: Hydro, 3: Grid (Govt), 4: Battery]
+    [0:Solar, 1:Wind, 2:Hydro, 3:Grid (Govt), 4:Battery]
     """
-    # Calculate total supply across all 5 sources
+    # 1. Energy Balance
     total_supply = schedule.sum(axis=1)
     diff = total_supply - demand
-
-    # Calculate energy imbalances
-    unmet = np.sum(np.clip(-diff, 0, None))   
-    surplus = np.sum(np.clip(diff, 0, None))  
+    unmet = np.sum(np.clip(-diff, 0, None))
     
-    # Calculate "Monetary" cost of using Grid Power (Column index 3)
-    grid_usage = np.sum(schedule[:, 3])
-    grid_penalty = grid_usage * GRID_COST_WEIGHT
-
-    # Total score (Higher/Less Negative is better)
-    # The GA will now try to reduce grid_penalty while keeping unmet at 0
-    return -(UNMET_WEIGHT * unmet + SURPLUS_WEIGHT * surplus + grid_penalty)
+    # 2. Financial Logic (Rupee-based)
+    # Defaulting to average Indian commercial rates if not provided in config
+    import_rate = 7.5 if config is None else config.get("import_price", 7.5)
+    export_rate = 3.5 if config is None else config.get("export_price", 3.5)
+    
+    # Calculate Import Cost (Power taken from DISCOM)
+    grid_import = schedule[:, 3]
+    total_import_cost = np.sum(grid_import * import_rate)
+    
+    # Calculate Export Credits (Net Metering - Selling back to Govt)
+    # Only surplus renewable energy (or battery) that exceeds demand is exported
+    surplus_energy = np.clip(diff, 0, None)
+    total_export_credit = np.sum(surplus_energy * export_rate)
+    
+    # 3. Final Fitness Calculation
+    # We want to minimize (Import Cost - Export Credit)
+    net_bill = total_import_cost - total_export_credit
+    
+    # We return a negative value because the GA tries to MAXIMIZE fitness.
+    # Maximizing -(Penalty + Bill) means minimizing blackouts and minimizing the bill.
+    return -(UNMET_WEIGHT * unmet + net_bill)
