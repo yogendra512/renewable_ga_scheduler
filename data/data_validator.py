@@ -1,5 +1,6 @@
 """
 Validate and clean input data before GA processing.
+Updated for Pandas 3.0+ compatibility.
 """
 import pandas as pd
 
@@ -7,8 +8,8 @@ def validate_data(df: pd.DataFrame) -> pd.DataFrame:
     """Clean dataset: Fill NaNs, clamp values, and smooth solar."""
     df = df.copy()
 
-    # Fill missing values using forward fill, then zeros
-    df = df.fillna(method="ffill").fillna(0)
+    # MODERN FIX: Replace fillna(method="ffill") with .ffill()
+    df = df.ffill().fillna(0)
 
     # Ensure Demand is at least 10 to avoid zero-division or unrealistic scenarios
     df["Demand"] = df["Demand"].clip(lower=10)
